@@ -6,6 +6,7 @@
 
 ADDON_INCOMPATIBLE = 0
 ADDON_OUTDATED = 1
+TTT2_GMOD_MIN_VERSION = 240313
 
 addonChecker = addonChecker or {}
 
@@ -194,7 +195,7 @@ addonChecker.curatedList = {
         reason = "Overwrites stock TTT2 crowbar which causes problems with doors and ttt_map_settings entity.",
         type = ADDON_INCOMPATIBLE,
     },
-    ["110148946"] = { -- ttt_broken_hand_fix by Jolez
+    ["1629273484"] = { -- ttt_broken_hand_fix by Jolez
         reason = "Already built in into TTT2",
         type = ADDON_INCOMPATIBLE,
     },
@@ -728,6 +729,21 @@ function addonChecker.Check()
     end
 
     print("=============================================================")
+
+    print("\n" .. "Current TTT2 version: " .. GAMEMODE.Version .. "\n")
+
+    if tonumber(VERSION) < TTT2_GMOD_MIN_VERSION then
+        ErrorNoHalt("Incompatible Garry's Mod version detected: " .. VERSION .. "\n" .. "\n")
+    else
+        print("Current Garry's Mod version: " .. VERSION .. "\n")
+    end
+
+    print(
+        "Minimum required Garry's Mod version for TTT2 to work: " .. TTT2_GMOD_MIN_VERSION .. "\n"
+    )
+
+    print("=============================================================")
+
     print("This is the end of the addon checker output.")
     print("")
 end

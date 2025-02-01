@@ -27,6 +27,8 @@ ENT.NextHeal = 0
 ENT.HealRate = 1
 ENT.HealFreq = 0.2
 
+ENT.CanUseKey = true
+
 ---
 -- @realm shared
 function ENT:SetupDataTables()
@@ -117,7 +119,6 @@ function ENT:GiveHealth(ply, healthMax)
 
             ---
             -- @realm shared
-            -- stylua: ignore
             if hook.Run("TTTPlayerUsedHealthStation", ply, self, healed) == false then
                 return false
             end

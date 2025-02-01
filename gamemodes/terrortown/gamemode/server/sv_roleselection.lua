@@ -22,24 +22,63 @@ roleselection.subroleLayers = {}
 roleselection.cv = {
     ---
     -- @realm server
-    -- stylua: ignore
-    ttt_max_roles = CreateConVar("ttt_max_roles", "0", {FCVAR_NOTIFY, FCVAR_ARCHIVE}, "Maximum amount of different roles"),
+    ttt_max_roles = CreateConVar(
+        "ttt_max_roles",
+        "0",
+        { FCVAR_NOTIFY, FCVAR_ARCHIVE },
+        "Maximum amount of different roles"
+    ),
 
     ---
     -- @realm server
-    -- stylua: ignore
-    ttt_max_roles_pct =  CreateConVar("ttt_max_roles_pct", "0", {FCVAR_NOTIFY, FCVAR_ARCHIVE}, "Maximum amount of different roles based on player amount. ttt_max_roles needs to be 0"),
+    ttt_max_roles_pct = CreateConVar(
+        "ttt_max_roles_pct",
+        "0",
+        { FCVAR_NOTIFY, FCVAR_ARCHIVE },
+        "Maximum amount of different roles based on player amount. ttt_max_roles needs to be 0"
+    ),
 
     ---
     -- @realm server
-    -- stylua: ignore
-    ttt_max_baseroles = CreateConVar("ttt_max_baseroles", "0", {FCVAR_NOTIFY, FCVAR_ARCHIVE}, "Maximum amount of different baseroles"),
+    ttt_max_baseroles = CreateConVar(
+        "ttt_max_baseroles",
+        "0",
+        { FCVAR_NOTIFY, FCVAR_ARCHIVE },
+        "Maximum amount of different baseroles"
+    ),
 
     ---
     -- @realm server
-    -- stylua: ignore
-    ttt_max_baseroles_pct = CreateConVar("ttt_max_baseroles_pct", "0", {FCVAR_NOTIFY, FCVAR_ARCHIVE}, "Maximum amount of different baseroles based on player amount. ttt_max_baseroles needs to be 0")
-,
+    ttt_max_baseroles_pct = CreateConVar(
+        "ttt_max_baseroles_pct",
+        "0",
+        { FCVAR_NOTIFY, FCVAR_ARCHIVE },
+        "Maximum amount of different baseroles based on player amount. ttt_max_baseroles needs to be 0"
+    ),
+
+    ---
+    -- @realm server
+    ttt_role_derandomize_mode = CreateConVar(
+        "ttt_role_derandomize_mode",
+        tostring(ROLE_DERAND_BOTH),
+        { FCVAR_NOTIFY, FCVAR_ARCHIVE },
+        "The mode to use for role selection derandomization",
+        ROLE_DERAND_NONE,
+        ROLE_DERAND_BOTH
+    ),
+
+    ---
+    -- NOTE: Currently the minimum is 1. In theory, it could be set to 0, which would mean that players cannot get the same role (or subrole, according to the mode)
+    -- twice in a row. I suspect we'd need some special handling in role distribution to make that not get stuck in an infinite loop or have some other undesirable
+    -- behavior in certain cases.
+    -- @realm server
+    ttt_role_derandomize_min_weight = CreateConVar(
+        "ttt_role_derandomize_min_weight",
+        "10",
+        { FCVAR_NOTIFY, FCVAR_ARCHIVE },
+        "The minimum weight a player can have with derandomize on",
+        1
+    ),
 }
 
 -- saving and loading
@@ -190,6 +229,28 @@ function roleselection.SaveLayers()
 end
 
 ---
+-- Initializes the player's role weights to be their minimum value.
+--
+-- @param Player ply
+-- @realm server
+function roleselection.InitializeRoleWeights(ply)
+    -- Initialize the weight table
+    local minWeight = roleselection.cv.ttt_role_derandomize_min_weight:GetInt()
+    local roleWeightTable = {}
+    local roleList = roles.GetList()
+
+    for i = 1, #roleList do
+        local roleData = roleList[i]
+
+        if not roleData.isAbstract then
+            roleWeightTable[roleData.index] = minWeight
+        end
+    end
+
+    ply:SetRoleWeightTable(roleWeightTable)
+end
+
+---
 -- Returns the current amount of selected/already selected @{ROLE}s.
 --
 -- @param number subrole subrole id of a @{ROLE}'s index
@@ -233,19 +294,24 @@ end
 -- @internal
 local function GetAvailableRoleAmount(roleData, forced, maxPlys)
     local bool = true
+    local reason = ROLEINSPECT_REASON_FORCED
 
     if not forced then
         local randomCVar = GetConVar("ttt_" .. roleData.name .. "_random")
 
         bool = math.random(100) <= (randomCVar and randomCVar:GetInt() or 100)
+        reason = ROLEINSPECT_REASON_ROLE_CHANCE
     end
 
     if bool then
-        return roleData:GetAvailableRoleCount(maxPlys)
-            - roleselection.GetCurrentRoleAmount(roleData.index)
+        local roleCount, newReason = roleData:GetAvailableRoleCount(maxPlys)
+        if roleCount == 0 then
+            reason = newReason
+        end
+        return roleCount - roleselection.GetCurrentRoleAmount(roleData.index), reason
     end
 
-    return 0
+    return 0, reason
 end
 
 ---
@@ -263,7 +329,6 @@ function roleselection.GetSelectablePlayers(plys)
         ---
         -- Everyone on the spec team is in specmode
         -- @realm server
-        -- stylua: ignore
         if not ply:GetForceSpec() and not hook.Run("TTT2DisableRoleSelection", ply) then
             tmp[#tmp + 1] = ply
         end
@@ -279,7 +344,9 @@ end
 -- @return table a list of all selectable @{ROLE}s
 -- @realm server
 function roleselection.GetAllSelectableRolesList(maxPlys)
+    roleinspect.ReportStageExtraInfo(ROLEINSPECT_STAGE_PRESELECT, "maxPlayers", maxPlys)
     if maxPlys < 2 then
+        roleinspect.ReportStageExtraInfo(ROLEINSPECT_STAGE_PRESELECT, "finalRoleCounts", {})
         return
     end
 
@@ -289,10 +356,22 @@ function roleselection.GetAllSelectableRolesList(maxPlys)
         forcedRolesTbl[subrole] = true
     end
 
-    local rolesCountTbl = {
-        [ROLE_INNOCENT] = GetAvailableRoleAmount(roles.INNOCENT, true, maxPlys),
-        [ROLE_TRAITOR] = GetAvailableRoleAmount(roles.TRAITOR, true, maxPlys),
+    local defaultRoles = {
+        [ROLE_INNOCENT] = roles.INNOCENT,
+        [ROLE_TRAITOR] = roles.TRAITOR,
     }
+    local rolesCountTbl = {}
+    for k, v in pairs(defaultRoles) do
+        local count, reason = GetAvailableRoleAmount(v, true, maxPlys)
+        rolesCountTbl[k] = count
+        roleinspect.ReportDecision(
+            ROLEINSPECT_STAGE_PRESELECT,
+            k,
+            nil,
+            ROLEINSPECT_DECISION_CONSIDER,
+            reason
+        )
+    end
 
     local checked = {}
     local rlsList = roles.GetList()
@@ -308,11 +387,19 @@ function roleselection.GetAllSelectableRolesList(maxPlys)
         checked[roleData.index] = true
 
         -- INNOCENT and TRAITOR are all the time selectable
-        if
-            roleData == roles.INNOCENT
-            or roleData == roles.TRAITOR
-            or not roleData:IsSelectable()
-        then
+        if roleData == roles.INNOCENT or roleData == roles.TRAITOR then
+            continue
+        end
+
+        local selectable, sreason = roleData:IsSelectable()
+        if not selectable then
+            roleinspect.ReportDecision(
+                ROLEINSPECT_STAGE_PRESELECT,
+                roleData.index,
+                nil,
+                ROLEINSPECT_DECISION_NO_CONSIDER,
+                sreason or ROLEINSPECT_REASON_ROLE_DECISION
+            )
             continue
         end
 
@@ -327,15 +414,28 @@ function roleselection.GetAllSelectableRolesList(maxPlys)
             if not checked[baseRoleData.index] then
                 checked[baseRoleData.index] = true
 
-                local rolesCount = GetAvailableRoleAmount(
+                local rolesCount, reason = GetAvailableRoleAmount(
                     baseRoleData,
                     forcedRolesTbl[baseRoleData.index],
                     maxPlys
                 )
+                reason = reason or ROLEINSPECT_REASON_ROLE_DECISION
+
+                local decision = ROLEINSPECT_DECISION_NO_CONSIDER
 
                 if rolesCount > 0 then
                     rolesCountTbl[baseRoleData.index] = rolesCount
+                    reason = ROLEINSPECT_REASON_PASSED
+                    decision = ROLEINSPECT_DECISION_CONSIDER
                 end
+
+                roleinspect.ReportDecision(
+                    ROLEINSPECT_STAGE_PRESELECT,
+                    baseRoleData.index,
+                    nil,
+                    decision,
+                    reason
+                )
             end
 
             -- continue if baserole is not available
@@ -345,13 +445,27 @@ function roleselection.GetAllSelectableRolesList(maxPlys)
         end
 
         -- now check for subrole availability
-        local rolesCount = GetAvailableRoleAmount(roleData, forcedRolesTbl[roleData.index], maxPlys)
+        local rolesCount, reason =
+            GetAvailableRoleAmount(roleData, forcedRolesTbl[roleData.index], maxPlys)
+        reason = reason or ROLEINSPECT_REASON_ROLE_DECISION
 
+        local decision = ROLEINSPECT_DECISION_NO_CONSIDER
         if rolesCount > 0 then
             rolesCountTbl[roleData.index] = rolesCount
+            reason = ROLEINSPECT_REASON_PASSED
+            decision = ROLEINSPECT_DECISION_CONSIDER
         end
+
+        roleinspect.ReportDecision(
+            ROLEINSPECT_STAGE_PRESELECT,
+            roleData.index,
+            nil,
+            decision,
+            reason
+        )
     end
 
+    roleinspect.ReportStageExtraInfo(ROLEINSPECT_STAGE_PRESELECT, "finalRoleCounts", rolesCountTbl)
     return rolesCountTbl
 end
 
@@ -398,6 +512,10 @@ function roleselection.GetSelectableRolesList(maxPlys, rolesAmountList)
         end
     end
 
+    if maxRoles then
+        roleinspect.ReportStageExtraInfo(ROLEINSPECT_STAGE_LAYERING, "maxRoles", maxRoles)
+    end
+
     -- damn, not again
     local maxBaseroles = roleselection.cv.ttt_max_baseroles:GetInt()
     if maxBaseroles == 0 then
@@ -405,6 +523,10 @@ function roleselection.GetSelectableRolesList(maxPlys, rolesAmountList)
         if maxBaseroles == 0 then
             maxBaseroles = nil
         end
+    end
+
+    if maxBaseroles then
+        roleinspect.ReportStageExtraInfo(ROLEINSPECT_STAGE_LAYERING, "maxBaseroles", maxBaseroles)
     end
 
     -- we have to create a enumerable table to get random results easily
@@ -439,12 +561,35 @@ function roleselection.GetSelectableRolesList(maxPlys, rolesAmountList)
     local curRoles = 2 -- amount of roles, start with 2 because INNOCENT and TRAITOR are all the time available
     local curBaseroles = 2 -- amount of base roles, ...
 
-    local layeredBaseRolesTbl = table.Copy(roleselection.baseroleLayers) -- layered roles list, the order defines the pick order. Just one role per layer is picked. Before a role is picked, the given layer is cleared (checked if the given roles are still selectable). Insert a table as a "or" list
+    -- layered roles list, the order defines the pick order. Just one role per layer is picked.
+    -- Before a role is picked, the given layer is cleared (checked if the given roles are still selectable). Insert a table as a "or" list
+    local layeredBaseRolesTbl = table.Copy(roleselection.baseroleLayers)
+
+    roleinspect.ReportStageExtraInfo(
+        ROLEINSPECT_STAGE_LAYERING,
+        "beforeBaseRoleLayers",
+        layeredBaseRolesTbl
+    )
+    roleinspect.ReportStageExtraInfo(
+        ROLEINSPECT_STAGE_LAYERING,
+        "beforeAvailableBaseRoles",
+        availableBaseRolesTbl
+    )
 
     ---
     -- @realm server
-    -- stylua: ignore
     hook.Run("TTT2ModifyLayeredBaseRoles", layeredBaseRolesTbl, availableBaseRolesTbl)
+
+    roleinspect.ReportStageExtraInfo(
+        ROLEINSPECT_STAGE_LAYERING,
+        "afterBaseRoleLayers",
+        layeredBaseRolesTbl
+    )
+    roleinspect.ReportStageExtraInfo(
+        ROLEINSPECT_STAGE_LAYERING,
+        "afterAvailableBaseRoles",
+        availableBaseRolesTbl
+    )
 
     local baseroleLoopTbl = { -- just contains available / selectable baseroles
         ROLE_TRAITOR,
@@ -454,26 +599,38 @@ function roleselection.GetSelectableRolesList(maxPlys, rolesAmountList)
     local currentlyAvailableRolesAmount = rolesAmountList[ROLE_TRAITOR]
         + rolesAmountList[ROLE_INNOCENT]
 
+    local baseroleExitReason = ROLEINSPECT_REASON_PASSED
+
     -- first of all, we need to select the baseroles. Otherwise, we would select subroles that never gonna be choosen because if the missing baserole
     for i = 1, availableBaseRolesAmount do
         -- if the limit is reached or no available roles left (could happen if removing available roles that weren't already selected in layered "or"-tables), stop selection
-        if
-            currentlyAvailableRolesAmount >= maxPlys
-            or maxRoles and maxRoles <= curRoles
-            or maxBaseroles and maxBaseroles <= curBaseroles
-            or #availableBaseRolesTbl < 1
-        then
+        if currentlyAvailableRolesAmount >= maxPlys then
+            baseroleExitReason = ROLEINSPECT_REASON_NO_PLAYERS
+            break
+        end
+
+        if maxRoles and maxRoles <= curRoles or maxBaseroles and maxBaseroles <= curBaseroles then
+            baseroleExitReason = ROLEINSPECT_REASON_TOO_MANY_ROLES
+            break
+        end
+
+        if #availableBaseRolesTbl < 1 then
+            -- no reason needed; just ran out of roles to distribute
             break
         end
 
         -- the selected role
         local subrole = nil
+        local subroleReason = ROLEINSPECT_REASON_PASSED
 
         -- if there are still defined layer
         if #layeredBaseRolesTbl >= i then
             for j = i, #layeredBaseRolesTbl do
+                -- clean the currently indexed layer (so that it just includes selectable roles),
+                -- because we working with predefined layers that probably includes roles that aren't
+                -- selectable with the current amount of players, etc.
                 local cleanedLayerTbl =
-                    CleanupAvailableRolesLayerTbl(availableBaseRolesTbl, layeredBaseRolesTbl[i]) -- clean the currently indexed layer (so that it just includes selectable roles), because we working with predefined layers that probably includes roles that aren't selectable with the current amount of players, etc.
+                    CleanupAvailableRolesLayerTbl(availableBaseRolesTbl, layeredBaseRolesTbl[i])
 
                 -- if there is no selectable role left in the current layer
                 if #cleanedLayerTbl < 1 then
@@ -483,8 +640,24 @@ function roleselection.GetSelectableRolesList(maxPlys, rolesAmountList)
                     continue
                 end
 
-                subrole = cleanedLayerTbl[math.random(#cleanedLayerTbl)]
+                local index = math.random(#cleanedLayerTbl)
+                subrole = cleanedLayerTbl[index]
+                -- once we've selected a role from the layer, we'll never consider this
+                -- layer again. Report all other layers
+                subroleReason = ROLEINSPECT_REASON_LAYER
+                for k = 1, #cleanedLayerTbl do
+                    if k == index then
+                        continue
+                    end
 
+                    roleinspect.ReportDecision(
+                        ROLEINSPECT_STAGE_LAYERING,
+                        cleanedLayerTbl[k],
+                        nil,
+                        ROLEINSPECT_DECISION_NO_CONSIDER,
+                        ROLEINSPECT_REASON_LAYER
+                    )
+                end
                 break
             end
         end
@@ -493,6 +666,7 @@ function roleselection.GetSelectableRolesList(maxPlys, rolesAmountList)
         if not subrole then
             local rnd = math.random(#availableBaseRolesTbl)
             subrole = availableBaseRolesTbl[rnd]
+            subroleReason = ROLEINSPECT_REASON_NOT_LAYERED
 
             table.remove(availableBaseRolesTbl, rnd) -- selected subrole shouldn't get selected multiple times
         end
@@ -503,17 +677,60 @@ function roleselection.GetSelectableRolesList(maxPlys, rolesAmountList)
         selectableRoles[subrole] = amountForThisRole
         baseroleLoopTbl[#baseroleLoopTbl + 1] = subrole
 
+        roleinspect.ReportDecision(
+            ROLEINSPECT_STAGE_LAYERING,
+            subrole,
+            nil,
+            amountForThisRole > 0 and ROLEINSPECT_DECISION_CONSIDER
+                or ROLEINSPECT_DECISION_NO_CONSIDER,
+            subroleReason
+        )
+
         curRoles = curRoles + 1
         curBaseroles = curBaseroles + 1
         currentlyAvailableRolesAmount = currentlyAvailableRolesAmount + amountForThisRole
     end
 
+    -- report the result for all other baseroles not considered, whatever the reason
+    if #availableBaseRolesTbl > 0 then
+        for k = 1, #availableBaseRolesTbl do
+            roleinspect.ReportDecision(
+                ROLEINSPECT_STAGE_LAYERING,
+                availableBaseRolesTbl[k],
+                nil,
+                ROLEINSPECT_DECISION_NO_CONSIDER,
+                baseroleExitReason
+            )
+        end
+    end
+
     local layeredSubRolesTbl = table.Copy(roleselection.subroleLayers) -- layered roles list, the order defines the pick order. Just one role per layer is picked. Before a role is picked, the given layer is cleared (checked if the given roles are still selectable). Insert a table as a "or" list
+
+    roleinspect.ReportStageExtraInfo(
+        ROLEINSPECT_STAGE_LAYERING,
+        "beforeSubRoleLayers",
+        layeredSubRolesTbl
+    )
+    roleinspect.ReportStageExtraInfo(
+        ROLEINSPECT_STAGE_LAYERING,
+        "beforeAvailableSubRoles",
+        availableSubRolesTbl
+    )
 
     ---
     -- @realm server
-    -- stylua: ignore
     hook.Run("TTT2ModifyLayeredSubRoles", layeredSubRolesTbl, availableSubRolesTbl)
+
+    roleinspect.ReportStageExtraInfo(
+        ROLEINSPECT_STAGE_LAYERING,
+        "afterSubRoleLayers",
+        layeredSubRolesTbl
+    )
+    roleinspect.ReportStageExtraInfo(
+        ROLEINSPECT_STAGE_LAYERING,
+        "afterAvailableSubRoles",
+        availableSubRolesTbl
+    )
 
     -- Counts max distributable subroles after cleanup
     local maxSubroleCount = 0
@@ -568,9 +785,16 @@ function roleselection.GetSelectableRolesList(maxPlys, rolesAmountList)
         layeredSubRolesTbl[baseRole] = nil
     end
 
+    local subroleExitReason = ROLEINSPECT_REASON_PASSED
+
     -- Now we need to select the subroles randomly and respect layers
     for i = 1, maxSubroleCount do
-        if maxRoles and maxRoles <= curRoles or #baseroleLoopTbl < 1 then
+        if maxRoles and maxRoles <= curRoles then
+            subroleExitReason = ROLEINSPECT_REASON_TOO_MANY_ROLES
+            break
+        end
+
+        if #baseroleLoopTbl < 1 then
             break
         end -- if the limit is reached, stop selection
 
@@ -582,21 +806,55 @@ function roleselection.GetSelectableRolesList(maxPlys, rolesAmountList)
 
         -- the selected role
         local subrole = nil
+        local subroleReason = nil
 
         -- If there are still defined layers check them first
         if subroleLayers and #subroleLayers >= 1 then
-            subrole = subroleLayers[1][math.random(#subroleLayers[1])]
+            local index = math.random(#subroleLayers[1])
+            subrole = subroleLayers[1][index]
+            subroleReason = ROLEINSPECT_REASON_LAYER
+
+            -- report other layer members
+            for k = 1, #subroleLayers[1] do
+                if k == index then
+                    continue
+                end
+
+                roleinspect.ReportDecision(
+                    ROLEINSPECT_STAGE_LAYERING,
+                    subroleLayers[1][k],
+                    nil,
+                    ROLEINSPECT_DECISION_NO_CONSIDER,
+                    ROLEINSPECT_REASON_LAYER
+                )
+            end
 
             table.remove(subroleLayers, 1)
         else
             -- If no layers left, choose random subrole
             local rnd = math.random(#subrolesUnlayered)
             subrole = subrolesUnlayered[rnd]
+            subroleReason = ROLEINSPECT_REASON_NOT_LAYERED
 
             table.remove(subrolesUnlayered, rnd)
         end
 
         selectableRoles[subrole] = rolesAmountList[subrole]
+
+        roleinspect.ReportStageExtraInfo(
+            ROLEINSPECT_STAGE_LAYERING,
+            "subroleSelectBaseroleOrder",
+            { baserole = baserole, subrole = subrole }
+        )
+
+        roleinspect.ReportDecision(
+            ROLEINSPECT_STAGE_LAYERING,
+            subrole,
+            nil,
+            rolesAmountList[subrole] > 0 and ROLEINSPECT_DECISION_CONSIDER
+                or ROLEINSPECT_DECISION_NO_CONSIDER,
+            subroleReason
+        )
 
         curRoles = curRoles + 1
 
@@ -610,10 +868,51 @@ function roleselection.GetSelectableRolesList(maxPlys, rolesAmountList)
         table.remove(baseroleLoopTbl, cBase)
     end
 
+    -- report the result for other subroles which ended up not considered
+    for baseroleIdx = 1, #baseroleLoopTbl do
+        local baserole = baseroleLoopTbl[baseroleIdx]
+        local subroleLayers = layeredSubRolesTbl[baserole]
+        local subrolesUnlayered = availableSubRolesTbl[baserole]
+
+        -- first, remaining layers
+        if subroleLayers and #subroleLayers > 0 then
+            for i = 1, #subroleLayers do
+                local layer = subroleLayers[i]
+                for j = 1, #layer do
+                    roleinspect.ReportDecision(
+                        ROLEINSPECT_STAGE_LAYERING,
+                        layer[j],
+                        nil,
+                        ROLEINSPECT_DECISION_NO_CONSIDER,
+                        subroleExitReason
+                    )
+                end
+            end
+        end
+
+        -- then, unlayered
+        for i = 1, #subrolesUnlayered do
+            roleinspect.ReportDecision(
+                ROLEINSPECT_STAGE_LAYERING,
+                subrolesUnlayered[i],
+                nil,
+                ROLEINSPECT_DECISION_NO_CONSIDER,
+                subroleExitReason
+            )
+        end
+    end
+
+    roleinspect.ReportStageExtraInfo(ROLEINSPECT_STAGE_LAYERING, "selectableRoles", selectableRoles)
+
     ---
     -- @realm server
-    -- stylua: ignore
     hook.Run("TTT2ModifySelectableRoles", selectableRoles)
+
+    roleinspect.ReportStageExtraInfo(
+        ROLEINSPECT_STAGE_LAYERING,
+        "finalSelectableRoles",
+        selectableRoles
+    )
 
     roleselection.selectableRoles = selectableRoles
 
@@ -633,15 +932,67 @@ local function SetSubRoles(plys, availableRoles, selectableRoles, selectedForced
     local plysAmount = #plys
     local availableRolesAmount = #availableRoles
     local tmpSelectableRoles = table.Copy(selectableRoles)
+    local modeDerandomize = roleselection.cv.ttt_role_derandomize_mode:GetInt()
+    local derand = modeDerandomize == ROLE_DERAND_SUBROLE or modeDerandomize == ROLE_DERAND_BOTH
+
+    local minWeight = roleselection.cv.ttt_role_derandomize_min_weight:GetInt()
+    local subrolePlayerWeightTbls = {}
 
     while plysAmount > 0 and availableRolesAmount > 0 do
-        local pick = math.random(plysAmount)
-        local ply = plys[pick]
-
         local rolePick = math.random(availableRolesAmount)
         local subrole = availableRoles[rolePick]
         local roleData = roles.GetByIndex(subrole)
         local roleCount = tmpSelectableRoles[subrole]
+
+        -- record the subrole order in the baserole slot
+        roleinspect.ReportRoleExtraInfo(
+            ROLEINSPECT_STAGE_SUBROLES,
+            roleData.baserole,
+            "subroleOrder",
+            { subrole = subrole, players = plys }
+        )
+
+        local plyWeights
+
+        if derand then
+            plyWeights = subrolePlayerWeightTbls[subrole]
+
+            if not plyWeights then
+                plyWeights = {}
+
+                -- precompute the weights table
+                for i = 1, #plys do
+                    local ply = plys[i]
+                    -- record the weight for this role for this player
+                    plyWeights[ply] = ply:GetRoleWeightTable()[subrole] or minWeight
+                end
+
+                -- record that table with roleinspect
+                roleinspect.ReportRoleExtraInfo(
+                    ROLEINSPECT_STAGE_SUBROLES,
+                    subrole,
+                    "playerWeights",
+                    plyWeights
+                )
+
+                subrolePlayerWeightTbls[subrole] = plyWeights
+            end
+        end
+
+        local pick, reason
+        if not derand then
+            -- select random index in plys table
+            pick = math.random(plysAmount)
+            reason = ROLEINSPECT_REASON_CHANCE
+        else
+            -- use a weighted sum to select the player
+            pick = math.WeightedRandom(plys, function(ply)
+                return plyWeights[ply]
+            end)
+            reason = ROLEINSPECT_REASON_WEIGHTED_CHANCE
+        end
+
+        local ply = plys[pick]
 
         if selectedForcedRoles[subrole] then
             roleCount = roleCount - selectedForcedRoles[subrole]
@@ -651,6 +1002,13 @@ local function SetSubRoles(plys, availableRoles, selectableRoles, selectedForced
             table.remove(plys, pick)
 
             roleselection.finalRoles[ply] = subrole
+            roleinspect.ReportDecision(
+                ROLEINSPECT_STAGE_SUBROLES,
+                subrole,
+                ply,
+                ROLEINSPECT_DECISION_ROLE_ASSIGNED,
+                reason
+            )
 
             plysAmount = plysAmount - 1
             roleCount = roleCount - 1
@@ -763,9 +1121,16 @@ local function SelectForcedRoles(plys, selectableRoles)
             roleselection.finalRoles[ply] = subrole
             curCount = curCount + 1
 
+            roleinspect.ReportDecision(
+                ROLEINSPECT_STAGE_FORCED,
+                subrole,
+                ply,
+                ROLEINSPECT_DECISION_ROLE_ASSIGNED,
+                ROLEINSPECT_REASON_FORCED
+            )
+
             ---
             -- @realm server
-            -- stylua: ignore
             hook.Run("TTT2ReceivedForcedRole", ply, subrole)
         end
 
@@ -813,6 +1178,12 @@ local function UpgradeRoles(plys, subrole, selectableRoles, selectedForcedRoles)
         end
     end
 
+    roleinspect.ReportStageExtraInfo(
+        ROLEINSPECT_STAGE_SUBROLES,
+        "upgradeOrder",
+        { baserole = subrole, subroles = availableRoles, players = plys }
+    )
+
     SetSubRoles(plys, availableRoles, selectableRoles, selectedForcedRoles)
 end
 
@@ -847,10 +1218,49 @@ local function SelectBaseRolePlayers(plys, subrole, roleAmount)
     local curRoles = 0
     local plysList = {}
     local roleData = roles.GetByIndex(subrole)
+    local modeDerandomize = roleselection.cv.ttt_role_derandomize_mode:GetInt()
+    local derand = modeDerandomize == ROLE_DERAND_BASEROLE or modeDerandomize == ROLE_DERAND_BOTH
+
+    local minWeight = roleselection.cv.ttt_role_derandomize_min_weight:GetInt()
+
+    roleinspect.ReportStageExtraInfo(
+        ROLEINSPECT_STAGE_BASEROLES,
+        "assignOrder",
+        { role = subrole, amount = roleAmount, players = plys }
+    )
+
+    local plyWeights = {}
+
+    if derand then
+        -- precompute the weights table
+        for i = 1, #plys do
+            local ply = plys[i]
+            -- record the weight for this role for this player
+            plyWeights[ply] = ply:GetRoleWeightTable()[subrole] or minWeight
+        end
+
+        -- record that table with roleinspect
+        roleinspect.ReportRoleExtraInfo(
+            ROLEINSPECT_STAGE_BASEROLES,
+            subrole,
+            "playerWeights",
+            plyWeights
+        )
+    end
 
     while curRoles < roleAmount and #plys > 0 do
-        -- select random index in plys table
-        local pick = math.random(#plys)
+        local pick, reason
+        if not derand then
+            -- select random index in plys table
+            pick = math.random(#plys)
+            reason = ROLEINSPECT_REASON_CHANCE
+        else
+            -- use a weighted sum to select the player
+            pick = math.WeightedRandom(plys, function(ply)
+                return plyWeights[ply]
+            end)
+            reason = ROLEINSPECT_REASON_WEIGHTED_CHANCE
+        end
 
         -- the player we consider
         local ply = plys[pick]
@@ -860,6 +1270,14 @@ local function SelectBaseRolePlayers(plys, subrole, roleAmount)
 
             curRoles = curRoles + 1
             plysList[curRoles] = ply
+
+            roleinspect.ReportDecision(
+                ROLEINSPECT_STAGE_BASEROLES,
+                subrole,
+                ply,
+                ROLEINSPECT_DECISION_ROLE_ASSIGNED,
+                reason
+            )
 
             roleselection.finalRoles[ply] = subrole -- give the player the final baserole (maybe he will receive his subrole later)
         end
@@ -877,6 +1295,7 @@ end
 -- @realm server
 function roleselection.SelectRoles(plys, maxPlys)
     roleselection.selectableRoles = nil -- reset to enable recalculation
+    roleinspect.Reset()
 
     GAMEMODE.LastRole = GAMEMODE.LastRole or {}
 
@@ -962,7 +1381,16 @@ function roleselection.SelectRoles(plys, maxPlys)
         for i = 1, #plysSecondPass do
             local ply = plysSecondPass[i]
 
-            roleselection.finalRoles[ply] = roleselection.finalRoles[ply] or ROLE_INNOCENT
+            if not roleselection.finalRoles[ply] then
+                roleselection.finalRoles[ply] = ROLE_INNOCENT
+                roleinspect.ReportDecision(
+                    ROLEINSPECT_STAGE_BASEROLES,
+                    ROLE_INNOCENT,
+                    ply,
+                    ROLEINSPECT_DECISION_ROLE_ASSIGNED,
+                    ROLEINSPECT_REASON_NOT_ASSIGNED
+                )
+            end
 
             if roleselection.finalRoles[ply] ~= ROLE_INNOCENT then
                 continue
@@ -976,16 +1404,39 @@ function roleselection.SelectRoles(plys, maxPlys)
 
     GAMEMODE.LastRole = {}
 
+    roleinspect.ReportStageExtraInfo(
+        ROLEINSPECT_STAGE_FINAL,
+        "beforeFinalRoles",
+        roleselection.finalRoles
+    )
+
     ---
     -- @realm server
-    -- stylua: ignore
     hook.Run("TTT2ModifyFinalRoles", roleselection.finalRoles)
+
+    roleinspect.ReportStageExtraInfo(
+        ROLEINSPECT_STAGE_FINAL,
+        "afterFinalRoles",
+        roleselection.finalRoles
+    )
+
+    local minWeight = roleselection.cv.ttt_role_derandomize_min_weight:GetInt()
 
     for i = 1, #plys do
         local ply = plys[i]
         local subrole = roleselection.finalRoles[ply] or ROLE_INNOCENT
 
         ply:SetRole(subrole, nil, true)
+
+        local baserole = roles.GetByIndex(subrole):GetBaseRole()
+        local roleWeightTable = ply:GetRoleWeightTable()
+        -- increment all role weights for the player
+        for r, w in pairs(roleWeightTable) do
+            roleWeightTable[r] = w + 1
+        end
+        -- reset the weights for the final role and its baserole
+        roleWeightTable[subrole] = minWeight
+        roleWeightTable[baserole] = minWeight
 
         -- store a steamid -> role map
         GAMEMODE.LastRole[ply:SteamID64()] = subrole

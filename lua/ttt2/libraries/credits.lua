@@ -29,8 +29,9 @@ function credits.HandleKillCreditsAward(victim, attacker)
 
     ---
     -- @realm server
-    -- stylua: ignore
-    if hook.Run("TTT2CheckCreditAward", victim, attacker) == false then return end
+    if hook.Run("TTT2CheckCreditAward", victim, attacker) == false then
+        return
+    end
 
     local roleDataAttacker = attacker:GetSubRoleData()
     local roleDataVictim = victim:GetSubRoleData()
@@ -48,6 +49,11 @@ function credits.HandleKillCreditsAward(victim, attacker)
         local creditsAmount = GetConVar("ttt_credits_award_kill"):GetInt()
 
         attacker:AddCredits(creditsAmount)
+
+        ---
+        -- @realm server
+        hook.Run("TTT2OnReceiveKillCredits", victim, attacker, creditsAmount)
+
         LANG.Msg(
             attacker,
             "credit_kill",
@@ -143,6 +149,11 @@ function credits.HandleKillCreditsAward(victim, attacker)
 
             -- now reward their player for their good game
             plyToAward:AddCredits(creditsAmount)
+
+            ---
+            -- @realm server
+            hook.Run("TTT2OnReceiveTeamAwardCredits", plyToAward, creditsAmount)
+
             LANG.Msg(plyToAward, "credit_all", { num = creditsAmount }, MSG_MSTACK_ROLE)
         end
     end

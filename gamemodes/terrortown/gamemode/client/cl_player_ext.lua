@@ -73,7 +73,6 @@ end
 
 ---
 -- @realm client
--- stylua: ignore
 local cv_ttt_show_gestures = CreateConVar("ttt_show_gestures", "1", FCVAR_ARCHIVE)
 
 ---
@@ -237,6 +236,16 @@ local function UpdateEquipment()
 end
 net.Receive("TTT_Equipment", UpdateEquipment)
 
+-- Deletes old avatars and caches new ones
+local function CacheAllPlayerAvatars(ply)
+    local plys = IsPlayer(ply) and { ply } or player.GetAll()
+
+    for i = 1, #plys do
+        local plyid64 = plys[i]:SteamID64()
+        draw.RefreshAvatars(plyid64)
+    end
+end
+
 ---
 -- SetupMove is called before the engine process movements. This allows us
 -- to override the players movement.
@@ -252,14 +261,19 @@ function GM:SetupMove(ply, mv, cmd)
         return
     end
 
-    ply.isReady = true
+    -- we make the assumption that every player, that already is connected
+    -- is ready. We can't tell for sure, but this is the best we can do here
+    local plys = player.GetAll()
+
+    for i = 1, #plys do
+        plys[i].isReady = true
+    end
 
     net.Start("TTT2SetPlayerReady")
     net.SendToServer()
 
     ---
     -- @realm shared
-    -- stylua: ignore
     hook.Run("TTT2PlayerReady", ply)
 
     -- check if a resolution change happened while
@@ -270,10 +284,29 @@ function GM:SetupMove(ply, mv, cmd)
     if oldScrH ~= ScrH() or oldScrW ~= ScrW() then
         ---
         -- @realm client
-        -- stylua: ignore
         hook.Run("OnScreenSizeChanged", oldScrW, oldScrH)
     end
+
+    -- Cache avatars for all players currently on the server
+    CacheAllPlayerAvatars(ply)
 end
+
+net.Receive("TTT2NotifyPlayerReadyOnClients", function()
+    local ply = net.ReadPlayer()
+
+    if not IsValid(ply) then
+        return
+    end
+
+    ply.isReady = true
+
+    ---
+    -- @realm shared
+    hook.Run("TTT2PlayerReady", ply)
+
+    -- Cache avatar of the new player
+    CacheAllPlayerAvatars(ply)
+end)
 
 ---
 -- Sets a revival reason that is displayed in the revival HUD element.
@@ -321,8 +354,9 @@ end)
 
 net.Receive("TTT2RevivalUpdate_IsReviving", function()
     local client = LocalPlayer()
+    local ply = net.ReadPlayer()
 
-    client.isReviving = net.ReadBool()
+    ply.isReviving = net.ReadBool()
 
     if not client.isReviving then
         return
@@ -387,6 +421,11 @@ function plymeta:SetSettingOnServer(identifier, value)
 
     ---
     -- @realm shared
-    -- stylua: ignore
-    hook.Run("TTT2PlayerSettingChanged", self, identifier, oldValue, self.playerSettings[identifier])
+    hook.Run(
+        "TTT2PlayerSettingChanged",
+        self,
+        identifier,
+        oldValue,
+        self.playerSettings[identifier]
+    )
 end

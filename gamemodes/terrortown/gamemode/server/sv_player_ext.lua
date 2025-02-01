@@ -22,6 +22,7 @@ local soundWeaponPickup = Sound("items/ammo_pickup.wav")
 util.AddNetworkString("StartDrowning")
 util.AddNetworkString("TTT2TargetPlayer")
 util.AddNetworkString("TTT2SetPlayerReady")
+util.AddNetworkString("TTT2NotifyPlayerReadyOnClients")
 util.AddNetworkString("TTT2SetRevivalReason")
 util.AddNetworkString("TTT2RevivalStopped")
 util.AddNetworkString("TTT2RevivalUpdate_IsReviving")
@@ -135,8 +136,9 @@ end
 function plymeta:SetDefaultCredits()
     ---
     -- @realm server
-    -- stylua: ignore
-    if hook.Run("TTT2SetDefaultCredits", self) then return end
+    if hook.Run("TTT2SetDefaultCredits", self) then
+        return
+    end
 
     if not self:IsShopper() then
         self:SetCredits(0)
@@ -157,7 +159,6 @@ function plymeta:SetDefaultCredits()
 
     ---
     -- @realm server
-    -- stylua: ignore
     self:SetCredits(math.ceil(hook.Run("TTT2ModifyDefaultTraitorCredits", self, c) or c))
 end
 
@@ -622,12 +623,10 @@ end
 function plymeta:SpawnForRound(deadOnly)
     ---
     -- @realm server
-    -- stylua: ignore
     hook.Run("PlayerSetModel", self)
 
     ---
     -- @realm server
-    -- stylua: ignore
     hook.Run("TTTPlayerSetColor", self)
 
     -- wrong alive status and not a willing spec who unforced after prep started
@@ -694,6 +693,9 @@ function plymeta:InitialSpawn()
     -- We never have weapons here, but this inits our equipment state
     self:StripAll()
 
+    -- Initialize role weights
+    roleselection.InitializeRoleWeights(self)
+
     -- set spawn position
     local spawnPoint = plyspawn.GetRandomSafePlayerSpawnPoint(self)
 
@@ -759,6 +761,11 @@ function plymeta:UnSpectate()
 end
 
 ---
+-- @accessor table A table containing the weights to use when selecting roles, if enabled.
+-- @realm server
+AccessorFunc(plymeta, "role_weights", "RoleWeightTable")
+
+---
 -- Returns whether a @{Player} is able to select a specific @{ROLE}
 -- @param ROLE roleData
 -- @param number choice_count
@@ -787,17 +794,24 @@ function plymeta:CanSelectRole(roleData, choice_count, role_count)
 end
 
 ---
--- Function taken from Trouble in Terrorist Town Commands (https://github.com/bender180/Trouble-in-Terrorist-Town-ULX-Commands)
+-- Tries to find the corpse of a player. Returns nil if none was found.
+-- @return Entity Returns the ragdoll entity
 -- @realm server
 function plymeta:FindCorpse()
     local ragdolls = ents.FindByClass("prop_ragdoll")
 
     for i = 1, #ragdolls do
-        local ent = ragdolls[i]
+        local rag = ragdolls[i]
 
-        if ent.uqid == self:UniqueID() and IsValid(ent) then
-            return ent or false
+        if
+            not rag:IsPlayerRagdoll()
+            or not CORPSE.IsRealPlayerCorpse(rag)
+            or CORPSE.GetPlayerSID64(rag) ~= self:SteamID64()
+        then
+            continue
         end
+
+        return rag
     end
 end
 
@@ -911,7 +925,6 @@ function plymeta:Revive(
 
             ---
             -- @realm server
-            -- stylua: ignore
             hook.Run("PlayerLoadout", self, true)
 
             self:SetCredits(CORPSE.GetCredits(corpse, 0))
@@ -972,8 +985,9 @@ function plymeta:SetReviving(isReviving)
     self.isReviving = isReviving
 
     net.Start("TTT2RevivalUpdate_IsReviving")
+    net.WritePlayer(self)
     net.WriteBool(self.isReviving)
-    net.Send(self)
+    net.Broadcast()
 end
 
 ---
@@ -1393,7 +1407,10 @@ end
 -- @return boolean Returns if this weapon's ammo can be dropped
 -- @realm server
 function plymeta:CanSafeDropAmmo(wep)
-    if not IsValid(self) or not (IsValid(wep) and wep.AmmoEnt) then
+    -- We explicitly check for the two common non-existent ammo ents (`nil` and `empty string`) here
+    -- to prevent these from leading to a console error later once they are fed into `ents.Create`.
+    -- There is currently no way to check if the AmmoEnt exists, so this is the best we can do.
+    if not IsValid(self) or not IsValid(wep) or not wep.AmmoEnt or wep.AmmoEnt == "" then
         return false
     end
 
@@ -1448,16 +1465,20 @@ function plymeta:DropAmmo(wep, useClip, amt)
         if useClip then
             amt = wep:Clip1()
         else
-            amt = math.min(wep.Primary.ClipSize, self:GetAmmoCount(wep.Primary.Ammo))
+            amt = math.min(box.AmmoAmount, self:GetAmmoCount(wep.Primary.Ammo))
         end
     end
     local hook_data = { amt }
 
     ---
     -- @realm server
-    -- stylua: ignore
     if hook.Run("TTT2DropAmmo", self, hook_data) == false then
-        LANG.Msg(self, useClip and "drop_ammo_prevented" or "drop_reserve_prevented", nil, MSG_MSTACK_WARN)
+        LANG.Msg(
+            self,
+            useClip and "drop_ammo_prevented" or "drop_reserve_prevented",
+            nil,
+            MSG_MSTACK_WARN
+        )
 
         return false
     end
@@ -1518,7 +1539,6 @@ function plymeta:CanPickupWeapon(wep, forcePickup, dropBlockingWeapon)
 
     ---
     -- @realm server
-    -- stylua: ignore
     local ret, errCode = hook.Run("PlayerCanPickupWeapon", self, wep, dropBlockingWeapon, true)
 
     self.forcedPickup = false
@@ -1683,10 +1703,24 @@ local function SetPlayerReady(_, ply)
 
     gameloop.PlayerReady(ply)
 
+    -- if random models for all players are enabled, they should be set as soon
+    -- as the player connects
+    if GetConVar("ttt2_select_unique_model_per_player"):GetBool() then
+        ply.defaultModel = playermodels.GetRandomPlayerModel()
+    end
+
     ---
     -- @realm server
-    -- stylua: ignore
     hook.Run("TTT2PlayerReady", ply)
+
+    -- notify all other players as well that this player is ready
+    local recipients = GetPlayerFilter(function(p)
+        return p ~= ply and p:IsReady()
+    end)
+
+    net.Start("TTT2NotifyPlayerReadyOnClients")
+    net.WritePlayer(ply)
+    net.Send(recipients)
 end
 net.Receive("TTT2SetPlayerReady", SetPlayerReady)
 
@@ -1896,3 +1930,20 @@ function GM:TTT2SetDefaultCredits(ply) end
 -- @hook
 -- @realm server
 function GM:TTT2ModifyDefaultTraitorCredits(ply, credits) end
+
+---
+-- Hook that is called when a player recieves credits for a kill.
+-- @param Player ply The player who killed another player
+-- @param Player victim The player who was killed
+-- @param number credits The amount of credits the player received
+-- @hook
+-- @realm server
+function GM:TTT2OnReceiveKillCredits(ply, victim, credits) end
+
+---
+-- Hook that is called when a player recieves credits as a team award.
+-- @param Player ply The player who was awarded the credits
+-- @param number credits The amount of credits the player received
+-- @hook
+-- @realm server
+function GM:TTT2OnReceiveTeamAwardCredits(ply, credits) end

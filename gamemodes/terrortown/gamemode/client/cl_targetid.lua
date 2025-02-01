@@ -19,23 +19,21 @@ targetid.Initialize()
 
 ---
 -- @realm client
--- stylua: ignore
 local cvMinimalisticTid = CreateConVar("ttt_minimal_targetid", "0", FCVAR_ARCHIVE)
 
 ---
 -- @realm client
--- stylua: ignore
 local cvDrawHalo = CreateConVar("ttt_entity_draw_halo", "1", FCVAR_ARCHIVE)
 
 ---
 -- @realm client
--- stylua: ignore
-local cvEnableSpectatorsoutline = CreateConVar("ttt2_enable_spectatorsoutline", "1", { FCVAR_ARCHIVE, FCVAR_USERINFO })
+local cvEnableSpectatorsoutline =
+    CreateConVar("ttt2_enable_spectatorsoutline", "1", { FCVAR_ARCHIVE, FCVAR_USERINFO })
 
 ---
 -- @realm client
--- stylua: ignore
-local cvEnableOverheadicons = CreateConVar("ttt2_enable_overheadicons", "1", { FCVAR_ARCHIVE, FCVAR_USERINFO })
+local cvEnableOverheadicons =
+    CreateConVar("ttt2_enable_overheadicons", "1", { FCVAR_ARCHIVE, FCVAR_USERINFO })
 
 surface.CreateAdvancedFont(
     "TargetID_Key",
@@ -85,6 +83,10 @@ local sizeIconOverHeadIcon = 0.7 * sizeOverHeadIcon
 -- @param Color colorRole The role color for the background
 -- @realm client
 function DrawOverheadRoleIcon(client, ply, iconRole, colorRole)
+    if not IsValid(client) or not IsValid(ply) then
+        return
+    end
+
     local ang = client:EyeAngles()
     local pos = ply:GetPos() + ply:GetHeadPosition()
     pos.z = pos.z + offsetOverHeadIcon
@@ -192,8 +194,8 @@ function GM:PostDrawTranslucentRenderables(bDrawingDepth, bDrawingSkybox)
 
         ---
         -- @realm client
-        -- stylua: ignore
-        local shouldDraw, material, color = hook.Run("TTT2ModifyOverheadIcon", ply, shouldDrawDefault)
+        local shouldDraw, material, color =
+            hook.Run("TTT2ModifyOverheadIcon", ply, shouldDrawDefault)
 
         if shouldDraw == false or not shouldDrawDefault then
             continue
@@ -279,7 +281,6 @@ function GM:HUDDrawTargetID()
 
     ---
     -- @realm client
-    -- stylua: ignore
     if hook.Run("HUDShouldDraw", "TTTPropSpec") then
         DrawPropSpecLabels(client)
     end
@@ -295,7 +296,6 @@ function GM:HUDDrawTargetID()
 
     ---
     -- @realm client
-    -- stylua: ignore
     local changedEnt = hook.Run("TTTModifyTargetedEntity", ent, distance)
 
     if changedEnt then
@@ -321,8 +321,10 @@ function GM:HUDDrawTargetID()
     targetid.HUDDrawTargetIDWeapons(tData)
     targetid.HUDDrawTargetIDPlayers(tData)
     targetid.HUDDrawTargetIDRagdolls(tData)
+    targetid.HUDDrawTargetIDButtons(tData)
     targetid.HUDDrawTargetIDDoors(tData)
     targetid.HUDDrawTargetIDDNAScanner(tData)
+    targetid.HUDDrawTargetIDVehicle(tData)
 
     -- add hints to the focused entity (deprecated method of adding stuff to targetID)
     local hint = ent.TargetIDHint
@@ -335,7 +337,6 @@ function GM:HUDDrawTargetID()
     -- now run a hook that can be used by addon devs that changes the appearance
     -- of the targetid
     -- @realm client
-    -- stylua: ignore
     hook.Run("TTTRenderEntityInfo", tData)
 
     local data = tData.data

@@ -52,11 +52,12 @@ function entityOutputs.RegisterHook(hookName)
     entityOutputs.hooks[hookName] = true
 
     hook.Add(hookName .. "_Internal", hookName .. "_name", function()
+        -- The `ACTIVATOR` and `CALLER` globals are only available during execution
+        -- see note at https://wiki.facepunch.com/gmod/ENTITY:TriggerOutput#example
         local activator, caller = ACTIVATOR, CALLER
 
         ---
         -- @ignore
-        -- stylua: ignore
         hook.Run(hookName, caller, activator)
     end)
 end
@@ -82,10 +83,17 @@ function entityOutputs.RegisterMapEntityOutput(ent, outputName, hookName, delay,
     delay = delay or 0
     repititions = repititions or -1
 
-    ---
     -- @ignore
-    -- stylua: ignore
-    ent:Fire("AddOutput", outputName .. " triggerhook:RunPassedCode:hook.Run('" .. hookName .. "_Internal'):" .. delay .. ":" .. repititions)
+    ent:Fire(
+        "AddOutput",
+        outputName
+            .. " triggerhook:RunPassedCode:hook.Run('"
+            .. hookName
+            .. "_Internal'):"
+            .. delay
+            .. ":"
+            .. repititions
+    )
 
     entityOutputs.RegisterHook(hookName)
 end

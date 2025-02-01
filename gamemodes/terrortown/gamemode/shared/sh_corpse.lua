@@ -13,6 +13,17 @@ CORPSE.dti = {
     INT_CREDITS = 0,
 }
 
+CORPSE.cv = {
+    ---
+    -- @realm shared
+    identify_body_woconfirm = CreateConVar(
+        "ttt_identify_body_woconfirm",
+        "1",
+        { FCVAR_NOTIFY, FCVAR_ARCHIVE, FCVAR_REPLICATED },
+        "Toggles whether ragdolls should be confirmed in gameloop.IsDetectiveMode() without clicking on confirm espacially"
+    ),
+}
+
 local dti = CORPSE.dti
 
 ---
@@ -81,4 +92,14 @@ end
 -- @realm shared
 function CORPSE.IsValidBody(rag)
     return IsValid(rag) and CORPSE.GetPlayerNick(rag, false) ~= false
+end
+
+---
+-- Checks if this corpse is a real corpse. There can be fake corpses that
+-- are tied to a specific player that are not real corpses
+-- @param Entity rag The ragdoll
+-- @return boolean Returns if the ragdoll is a real player corpse
+-- @realm shared
+function CORPSE.IsRealPlayerCorpse(rag)
+    return rag:GetNWBool("real_player_corpse", false)
 end

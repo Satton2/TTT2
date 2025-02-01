@@ -21,12 +21,17 @@ end
 if SERVER then
     ---
     -- @realm server
-    -- stylua: ignore
-    local ttt_min_inno_pct = CreateConVar("ttt_min_inno_pct", "0.47", {FCVAR_NOTIFY, FCVAR_ARCHIVE}, "Minimum multiplicator for each player to calculate the minimum amount of innocents")
+    local ttt_min_inno_pct = CreateConVar(
+        "ttt_min_inno_pct",
+        "0.47",
+        { FCVAR_NOTIFY, FCVAR_ARCHIVE },
+        "Minimum multiplicator for each player to calculate the minimum amount of innocents"
+    )
 
     ---
     -- @ignore
     function ROLE:GetAvailableRoleCount(ply_count)
-        return math.floor(ply_count * ttt_min_inno_pct:GetFloat())
+        return math.floor(ply_count * ttt_min_inno_pct:GetFloat()),
+            ROLEINSPECT_REASON_LOW_PROPORTION
     end
 end

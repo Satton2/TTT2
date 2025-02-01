@@ -31,6 +31,12 @@ markerVision.focussedMarkers = {}
 -- @return MARKER_VISION_ELEMENT The marker vision object that was created
 -- @realm shared
 function markerVision.Add(ent, identifier)
+    local _, index = markerVision.Get(ent, identifier)
+
+    if index ~= -1 then
+        table.remove(markerVision.registry, index)
+    end
+
     local mvObject = table.Copy(MARKER_VISION_ELEMENT)
     mvObject:SetEnt(ent)
     mvObject:SetIdentifier(identifier)
@@ -313,7 +319,6 @@ if CLIENT then
             -- now run a hook that can be used by addon devs that changes the appearance
             -- of the radar vision
             -- @realm client
-            -- stylua: ignore
             hook.Run("TTT2RenderMarkerVisionInfo", mvData)
 
             local params = mvData.params

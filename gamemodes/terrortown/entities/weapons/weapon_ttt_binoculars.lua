@@ -115,15 +115,12 @@ end
 ---
 -- @ignore
 function SWEP:SetZoomLevel(level)
-    if CLIENT then
-        return
-    end
-
-    local owner = self:GetOwner()
-
     self:SetZoomAmount(level)
 
-    owner:SetFOV(self.ZoomLevels[level], 0.3)
+    local owner = self:GetOwner()
+    if IsValid(owner) then
+        owner:SetFOV(self.ZoomLevels[level], 0.3)
+    end
 end
 
 ---
@@ -270,7 +267,7 @@ if CLIENT then
     -- @ignore
     function SWEP:Initialize()
         self:AddTTT2HUDHelp("binoc_help_pri", "binoc_help_sec")
-        self:AddHUDHelpLine("binoc_help_reload", Key("+reload", "R"))
+        self:AddHUDHelpLine("binoc_help_reload", Key("+reload", "undefined_key"))
 
         BaseClass.Initialize(self)
     end

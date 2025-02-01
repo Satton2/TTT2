@@ -9,7 +9,6 @@ local table = table
 ---
 -- @realm client
 -- @internal
--- stylua: ignore
 local changesVersion = CreateConVar("changes_version", "v0.0.0.0", FCVAR_ARCHIVE)
 
 local changes, currentVersion
@@ -2008,7 +2007,7 @@ function CreateChanges()
     )
 
     AddChange(
-        "TTT2 Base - v0.13.1",
+        "TTT2 Base - v0.13.1b",
         [[
 
         <h2>Fixed</h2>
@@ -2024,10 +2023,277 @@ function CreateChanges()
         os.time({ year = 2024, month = 02, day = 27 })
     )
 
+    AddChange(
+        "TTT2 Base - v0.13.2b",
+        [[
+        <h2>Added</h2>
+        <ul>
+            <li>Added upstream content files to base TTT2</li>
+            <li>Added <code>plymeta:IsFullySignedOn()</code> to allow excluding players that have not gotten control yet (by @EntranceJew)</li>
+        </ul>
+        <h2>Changed</h2>
+        <ul>
+            <li>Crosshair rendering now is a bit more flexible and customizable</li>
+            <li>A crosshair is now also drawn when holding a nade, making it less confusing when looking at entities</li>
+            <li>Hides item settings in the equipment editor that are only relevant for weapons</li>
+            <li>The binoculars now use the default crosshair as well</li>
+        </ul>
+        <h2>Fixed</h2>
+        <ul>
+            <li>Fixed the AFK timer accumulating while player not fully joined (by @EntranceJew)</li>
+            <li>Fixed weapons which set a custom view model texture having an error texture</li>
+            <li>Fixed the equipment menu throwing errors when clicking on some items</li>
+            <li>TTT2 now ignores Gmods SWEP.DrawCrosshair and always draws just its own crosshair to prevent two crosshairs at once</li>
+            <li>Fixed hud help text not being shown for some old weapons</li>
+            <li>Fixed detective search being overwritten by player search results</li>
+        </ul>
+    ]],
+        os.time({ year = 2024, month = 03, day = 10 })
+    )
+
+    AddChange(
+        "TTT2 Base - v0.14.0b",
+        [[
+
+        <h2>Added</h2>
+        <ul>
+            <li>Added hook <code>ENTITY:ClientUse()</code>, which is triggered clientside if an entity is used</li>
+            <ul>
+                <li>Return true to prevent also using this on the server for clientside only usecases</li>
+            </ul>
+            <li>Added hook <code>ENTITY:RemoteUse(ply)</code>, which is shared</li>
+            <ul>
+                <li>Return true if only clientside should be used</li>
+            </ul>
+            <li>Added RemoteUse to radio, you can now directly access it via use button on marker focus</li>
+            <li>Added sounds to multiple UI interactions (can be disabled in settings: Gameplay > Client-Sounds)</li>
+            <li>Added a globally audible sound when searching a body</li>
+            <li>Added the option to add a subtitle to a marker vision element</li>
+            <li>Added the option to assign random unique models at round start</li>
+            <li>Added a new voice chat UI</li>
+            <li>Added new credit related hooks</li>
+            <ul>
+                <li>Added <code>GM:TTT2CanTakeCredits()</code> hook for overriding whether a player is allowed to take credits from a given corpse</li>
+                <li>Added <code>GM:TTT2OnGiveFoundCredits()</code> hook which is called when a player has been given credits for searching a corpse</li>
+                <li>Added <code>GM:TTT2OnReceiveKillCredits()</code> hook which is called when a player receives credits for a kill</li>
+                <li>Added <code>GM:TTT2OnReceiveTeamAwardCredits()</code> hook which is called when a player receives credits as a team award</li>
+                <li>Added <code>GM:TTT2OnTransferCredits()</code> hook which is called when a player has successfully transferred a credit to another player</li>
+            </ul>
+            <li>Disabled locational voice during the preparing phase by default</li>
+            <ul>
+                <li>Added a ConVar <code>ttt_locational_voice_prep</code> to reenable it</li>
+            </ul>
+            <li>Added SWEP.EnableConfigurableClip and SWEP.ConfigurableClip to set the weapon's clip on buy via the equipment editor</li>
+            <li>Added Text / Nickname length limiting</li>
+            <li>Added <code>ttt_locational_voice_range</code> to set a cut-off radius for the locational voice chat range</li>
+            <li>Added a convar <code>ttt2_inspect_credits_always_visible</code> to control whether credits are visible to players that do not have a shop</li>
+            <li>Added multiple global voice chat activation modes for clients to choose from (Gameplay > Voice & Volume):</li>
+            <ul>
+                <li>Push-to-Talk (default)</li>
+                <li>Push-to-Mute</li>
+                <li>Toggle</li>
+                <li>Toggle (Activate on Join)</li>
+            </ul>
+            <li>Team Voice Chat is always push-to-talk and temporarily disables global voice chat while being used</li>
+            <li>Added a new generic button to F1 menu elements to be used in custom menus</li>
+            <li>Added toggle and run buttons to many F1 menu elements</li>
+            <li>Added combo cards to the UI, clickable cards that act like combo boxes</li>
+            <li>Added a run button to bindings in the bindings menu</li>
+            <li>Added a new admin commands menu</li>
+            <ul>
+                <li>Added a submenu to change maps</li>
+                <li>Added a submenu to issue basic commands</li>
+            </ul>
+            <li>Added a new gameloop module that contains all functions related to the round structure</li>
+            <li>Added a loading screen that hides the visible and audible lag introduced by the map cleanup on round change</li>
+            <li>Added a voice battery module that handles the voice battery</li>
+            <li>Added <code>admin.IsAdmin(ply)</code> as a wrapper that automatically calls <code>GM:TTT2AdminCheck</code></li>
+            <ul>
+                <li>Made sure this new function is used in our whole codebase for all admin checks</li>
+            </ul>
+            <li>Added <code>ENTITY:IsPlayerRagdoll</code> to check if a corpse is a real player ragdoll</li>
+            <li>Added improved vFire integration for everything in TTT2 that spawns fire</li>
+            <li>Added the <code>SWEP.DryFireSound</code> field to the weapon base to allow the dryfire sound to be easily changed</li>
+            <li>Added role derandomization options for perceptually fairer role distribution, enabled by default</li>
+            <li>Added targetID to buttons</li>
+            <li>Added force role admin command</li>
+            <li>Added <code>draw.RefreshAvatars(id64)</code> to refresh avatar icons</li>
+            <li>Added <code>GM:TTT2OnButtonUse(ply, ent, oldState)</code>: a hook that is triggered when a button is pressed and that is able to prevent that button press</li>
+            <li>Added TargetID and keyInfo to vehicles</li>
+            <li>Added <code>GM:TTT2PostButtonInitialization(buttonList)</code>: a hook that is called after all buttons on the map have been initialized</li>
+            </ul>
+        <h2>Changed</h2>
+        <ul>
+            <li>Placeable Entities are now checked for pickup clientside first</li>
+            <ul>
+                <li>C4 UI is not routed over the server anymore</li>
+            </ul>
+            <li>Visualizer can now only be picked up by the originator</li>
+            <li>TargetID is now hidden when a marker vision element is focused</li>
+            <li>Tracers are now drawn for every shot/pellet instead of only 25% of shots/pellets</li>
+            <li>The ConVar <code>ttt_debug_preventwin</code> will now also prevent the time limit from ending the round</li>
+            <li><code>GM:TTT2GiveFoundCredits</code> hook is no longer called when checking whether a player is allowed to take credits from a given corpse</li>
+            <li>Micro optimizations</li>
+            <ul>
+                <li>use <code>net.ReadPlayer</code> / <code>net.WritePlayer</code> if applicable instead of <code>net.Read|WriteEntity</code></li>
+                <li>Reduced radar bit size for net message</li>
+                <li>The holdtype for pistol weapons now matches the viewmodel</li>
+            </ul>
+            <li><code>VOICE.IsSpeaking(ply)</code> (clientside) can now be used to check if any player is speaking to you</li>
+            <li>Unified the spec color usage throughout the whole UI</li>
+            <li>Cleanup and performance optimizations for marks library</li>
+            <li>Updated the Turkish localization file</li>
+            <li>The level time now starts with the first preparing phase, meaning that idle on connect doesn't decrease the map time</li>
+            <li>Minor cleanup and optimizations in weapon code</li>
+            <li>Shotgun weapon changes</li>
+            <ul>
+                <li>Dry firing (attempting to shoot with no ammo) will now make you reload if possible, like all the other weapons do</li>
+                <li>Interrupting the reload should look and feel less jank</li>
+                <li>A third-person animation now plays when each shell is loaded (the pistol reload animation seems to fit best)</li>
+
+            <li>Now always properly checks if an entity is a true ragdoll to make sure no other props get ragdoll handling</li>
+            <li>Spectators are now able to look at corpses on fire</li>
+            <li>Corpses on fire display that information in targetID and MStack</li>
+            <li>Updated Russian and English localization files</li>
+            <li>Made <code>ply:IsReviving</code> a shared player variable</li>
+            <li>Updated and improved the Simplified Chinese localization file</li>
+            <li>Avatar icons are not fetched anymore but instead created with AvatarImage (fixes missing icons for Chinese players)</li>
+            <li><code>GM:TTT2PlayerReady</code> is now called for every player even on clients</li>
+            <li>Updated Japanese translation</li>
+            <li><code>plyspawn.GetSpawnPointsAroundSpawn</code> now tries to find spawns that are on the ground if possible</li>
+        </ul>
+        <h2>Fixed</h2>
+        <ul>
+            <li>DynamicCamera error when a weapon's CalcView doesn't return complete values</li>
+            <li>Roundendscreen showing karma changes even if karma is disabled</li>
+            <li>The player's FOV staying zoomed in if their weapon is removed while scoped in</li>
+            <li>The player's FOV staying zoomed in with the binoculars if they're removed from you</li>
+            <li>Weapon unscoping (or generally any time FOV is set back to default) being delayed due to the player's lag</li>
+            <li>Overhead icons sometimes being stuck at random places</li>
+            <li>A null entity error in the ShootBullet function in <code>weapon_tttbase</code></li>
+            <li>A nil compare error in the DrawHUD function in <code>weapon_tttbasegrenade</code></li>
+            <li>Players sometimes not receiving their role if they joined late to the game</li>
+            <li>Crowbar attack animation not being visible to the player swinging it</li>
+            <li>Weapon dryfire sound interrupting the weapon's gunshot sound</li>
+            <li>Incendiaries sometimes exploding without fire</li>
+            <li>Scoreboard not showing any body search info on players that changed to forced spec during a round</li>
+            <li>vFire explosions killing a player even if they have NoExplosionDamage equipped</li>
+            <li>A nil error in the PreDrop function in weapon_ttt_cse</li>
+            <li><code>table.FullCopy(tbl)</code> behavior when tbl contained a Vector or Angle</li>
+            <li>The bodysearch showing a wrong player icon when searching a fake body</li>
+            <li>Players respawned with <code>ply:Revive</code> sometimes spawning on a fake corpse</li>
+            <li>Undefined Keys breaking the gamemode</li>
+            <li>markerVision elements being visible to teammates of unknown teams (such as team Innocent)</li>
+            <li>Inverted settings being inverted twice in the equipment editor</li>
+            <li>OldTTT HUD sidebar elements missing translation</li>
+            <li>Avatar icons not refreshing if they were changed on Steam</li>
+            <li>A wrong label for the sprint speed multiplier in the F1 menu</li>
+            <li>Own player name being shown in targetID when in vehicle</li>
+            <li>Fixed <code>ShopEditor.BuildValidEquipmentCache()</code> being called too early on the client, resulting in a wrong cache state</li>
+        </ul>
+        <h2>Removed</h2>
+        <ul>
+            <li>Radio tab in shop UI</li>
+            <li>All uses of UseOverride-Hook inside TTT2 (It's still available for addons!)</li>
+            <li><code>round_restart</code>, <code>round_selected</code> and <code>round_started</code> MStack messages to reduce message spam</li>
+            <li>The old tips panel visible to spectators (moved to the new loading screen)</li>
+        </ul>
+        <h2>Breaking Changes</h2>
+        <ul>
+            <li>Renamed <code>GM:TTT2ModifyVoiceChatColor(ply, clr)</code> to <code>GM:TTT2ModifyVoiceChatMode(ply, mode)</code></li>
+            <li>Renamed <code>ply:GetHeightVector()</code> to <code>ply:GetHeadPosition()</code></li>
+            <li>Removed the TIPS module and replaced it with a new tips module</li>
+            <li>Removed <code>draw.WebImage(url, x, y, width, height, color, angle, cornerorigin)</code> and <code>draw.SeamlessWebImage(url, parentwidth, parentheight, xrep, yrep, color)</code> from the draw module</li>
+            <li>Due to <code>GM:TTT2PlayerReady</code> now being called for every player, addon devs have to make sure to check the player on the client</li>
+        </ul>
+
+    ]],
+        os.time({ year = 2024, month = 09, day = 20 })
+    )
+
+    AddChange(
+        "TTT2 Base - v0.14.1b",
+        [[
+
+        <h2>Added</h2>
+        <ul>
+            <li>Added Korean translation (by @Kojap)</li>
+            <li>Added diagnostic information to the addonchecker output.</li>
+            <ul>
+                <li>This also includes a Garry's Mod version check which triggers a warning if TTT2 is not compatible. First baseline version is '240313' (by @NickCloudAT)</li>
+            </ul>
+            <li>Added <code>GM:TTT2PlayDeathScream</code> hook to cancel or overwrite/change the deathscream sound that plays, when you die (by @NickCloudAT)</li>
+            <li>Added support for "toggle_zoom" binds to trigger the radio commands menu (by @TW1STaL1CKY)</li>
+            <li>Added option to use right click to enable/disable roles in the role layering menu (by @TimGoll)</li>
+            <li>Added a menu to allow admins to inspect, in detail, how and why roles are distributed as they are (by @nike4613)</li>
+            <li>Added option to enable team name next to role name on the HUD (by @milkwxter)</li>
+            <li>Added score event for winning with configurable role parameter (by @MrXonte)</li>
+            <li>Added ExplosiveSphereDamage game effect for easy calculation of explosion damage through walls (by @MrXonte)</li>
+            <li>Added support for outlines of different thickness (by @Wardenpotato)</li>
+        </ul>
+        <h2>Fixed</h2>
+        <ul>
+            <li>Fixed missing translation for None role error by removing it (by @mexikoedi)</li>
+            <li>Fixed sometimes entity use triggering the wrong or no entity (by @TimGoll)</li>
+            <li>Fixed translation of muting Terrorists and Spectators (by @mexikoedi)</li>
+            <li>Fixed continuous use being broken, meaing that holding E on a health station did nothing (by @TimGoll)</li>
+            <li>Fixed the loadingscreen disable causing an error (by @TimGoll)</li>
+            <li>Fixed the rounds left always displaying one less than actually left (by @TimGoll)</li>
+            <li>Fixed rendering glitches in the loading screen (by @TimGoll)</li>
+            <li>Fixed weapon pickup through walls (by @MrXonte)</li>
+            <li>Fixed spectating player still being visible through thermalvision after killing that player (by @MrXonte)</li>
+            <li>Fixed Magneto-stick not using C_Hands (by @SvveetMavis)</li>
+            <li>Fixed console error when dropping ammo for weapons with no AmmoEnt (by @MrXonte)</li>
+            <li>Fixed client error for a not fully initialized client (by @Histalek)</li>
+            <li>Fixed the targetID corpse hint not respecting <code>ttt_identify_body_woconfirm</code> (by @Histalek)</li>
+            <li>Fixed the beacon not being properly translated when placed (by @Histalek)</li>
+            <li>Fixed binoculars zooming not being predicted (by @Histalek)</li>
+            <li>Fixed an error when trying to pickup a placed equipment (e.g. beacon) (by @Histalek)</li>
+            <li>Fixed corpse searching sound playing when searched by a spectator, searched covertly, or searched long range (by @TW1STaL1CKY)</li>
+            <li>Fixed the mute button in the scoreboard not working (by @TW1STaL1CKY)</li>
+            <li>Fixed a few errors in shop error messages (by @Histalek)</li>
+            <li>Fixed <code>markerVision</code>'s registry table being able to contain duplicate obsolete entries, thus fixing potential syncing issues with markers (by @TW1STaL1CKY)</li>
+            <li>Fixed issue in new Ammo dropping that could cause an error when dropping for modified weapon bases. (by @MrXonte)</li>
+            <li>Fixed C4 not showing the correct inflictor when the player is killed (by @TimGoll)</li>
+            <li>Fixed M16 Ironsight misalignment (by @SvveetMavis)</li>
+            <li>Fixed outline interactions with certain weapon scopes (by @WardenPotato)</li>
+            <li>Fixed outlines not rendering uniformly (by @WardenPotato)</li>
+        </ul>
+        <h2>Changed</h2>
+        <ul>
+            <li>Updated French translation (by @MisterClems)</li>
+            <li>Updated Turkish localization (by @NovaDiablox)</li>
+            <li>Changed it so that continous use doesn't require direct focus; healing at a health station also works when looking around as long as you stay close by (by @TimGoll)</li>
+            <li>Updated Russian localization (by @Satton2)</li>
+            <li>Updated targetID to use <code>Vehicle:GetDriver</code> instead of the <code>ttt_driver</code> NWEntity (by @Histalek)</li>
+            <li>Updated Russian and English localization files (by @Satton2)</li>
+            <li>Updated old TTT HUD to show name of spectated player (by @somefnfplayerlol)</li>
+            <li>Changes to the enabled map prefixes will not be announced to players anymore (by @Histalek)</li>
+            <li>By default only <code>ttt</code> and <code>ttt2</code> map prefixes are enabled (by @Histalek)</li>
+            <li>Updated <code>ttt_identify_body_woconfirm</code> to be replicated across the server and client (by @Wryyyong)</li>
+            <li>Changed how Ammo is dropped; if drop should be from reserve ammo, now tries to drop a full ammo box instead of a full clip. (by @MrXonte)</li>
+            <li>Updated <code>ttt_spec_prop_control</code> to be replicated across the server and client (by @NickCloudAT)</li>
+            <ul>
+                <li>With this, the KeyHelp feature also hides the PropSpec bind if PropSpec is disabled on the server</li>
+            </ul>
+            <li>Renamed <code>ttt_session_limits_enabled</code> to <code>ttt_session_limits_mode</code>, introducing a four-mode control (0-3) for managing how TTT2 ends a session. (by @NickCloudAT)</li>
+            <ul>
+                <li>Modes: 0 = No session limit, 1 = Default TTT, 2 = Only time limit, 3 = Only round limit</li>
+            </ul>
+            <li>Moved all role-related admin options into the "Roles" menu (by @nike4613)</li>
+            <li>Improved description of role layering (by @nike4613)</li>
+            <li>Improved the role layering menu by showing which role is enabled and which is disabled (by @TimGoll)</li>
+            <li>Reworked C4 damage calculation with new gameEffect ExplosiveSphereDamage (by @MrXonte)</li>
+            <li>Changed the amount the M16 zooms in (by @SvveetMavis)</li>
+        </ul>
+
+    ]],
+        os.time({ year = 2025, month = 02, day = 01 })
+    )
+
     ---
     -- run hook for other addons to add their changelog as well
     -- @realm client
-    -- stylua: ignore
     hook.Run("TTT2AddChange", changes, currentVersion)
 end
 

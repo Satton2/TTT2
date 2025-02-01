@@ -10,7 +10,7 @@ local player = player
 local IsValid = IsValid
 local hook = hook
 
-VOCIE_MODE_GLOBAL = 0
+VOICE_MODE_GLOBAL = 0
 VOICE_MODE_TEAM = 1
 VOICE_MODE_SPEC = 2
 
@@ -22,21 +22,21 @@ local MutedState
 VOICE.cv = {
     ---
     -- @realm client
-    -- stylua: ignore
     duck_spectator = CreateConVar("ttt2_voice_duck_spectator", "0", { FCVAR_ARCHIVE }),
     ---
     -- @realm client
-    -- stylua: ignore
-    duck_spectator_amount = CreateConVar("ttt2_voice_duck_spectator_amount", "0", { FCVAR_ARCHIVE }),
+    duck_spectator_amount = CreateConVar(
+        "ttt2_voice_duck_spectator_amount",
+        "0",
+        { FCVAR_ARCHIVE }
+    ),
 
     ---
     -- @realm client
-    -- stylua: ignore
     scaling_mode = CreateConVar("ttt2_voice_scaling", "linear", { FCVAR_ARCHIVE }),
 
     ---
     -- @realm client
-    -- stylua: ignore
     activation_mode = CreateConVar("ttt2_voice_activation", "ptt", { FCVAR_ARCHIVE }),
 }
 
@@ -222,8 +222,8 @@ local function VoiceTeamTryEnable()
     end
 end
 
-local function VoiceTeamTryDisable()
-    if not VOICE.isTeam then
+local function VoiceTeamTryDisable(forceReenable)
+    if not VOICE.isTeam and not forceReenable then
         return
     end
 
@@ -232,7 +232,8 @@ local function VoiceTeamTryDisable()
         permissions.EnableVoiceChat(false)
         VOICE.isTeam = false
 
-        timer.Simple(0, function()
+        -- for some reason using a 0-delay timer here is inconsistent and won't always call GM:PlayerStartVoice
+        timer.Simple(0.05, function()
             permissions.EnableVoiceChat(true)
         end)
 
@@ -243,6 +244,11 @@ local function VoiceTeamTryDisable()
     end
 end
 
+-- disable team voice on team change (and maybe re-enable global voice chat)
+hook.Add("TTT2UpdateTeam", "TTT2DisableTeamVoice", function()
+    VoiceTeamTryDisable(true)
+end)
+
 ---
 -- Checks if a player can enable the team voice chat.
 -- @return boolean Returns if the player is able to use the team voice chat
@@ -252,7 +258,6 @@ function VOICE.CanTeamEnable()
 
     ---
     -- @realm client
-    -- stylua: ignore
     if hook.Run("TTT2CanUseVoiceChat", client, true) == false then
         return false
     end
@@ -284,7 +289,6 @@ function VOICE.CanEnable()
 
     ---
     -- @realm client
-    -- stylua: ignore
     if hook.Run("TTT2CanUseVoiceChat", client, false) == false then
         return false
     end
@@ -369,7 +373,6 @@ function GM:PlayerStartVoice(ply)
 
     ---
     -- @realm client
-    -- stylua: ignore
     mode = hook.Run("TTT2ModifyVoiceChatMode", ply, mode) or mode
 
     VOICE.SetVoiceMode(ply, mode)
@@ -429,25 +432,6 @@ local function ReceiveVoiceState()
     ply[tm .. "_gvoice"] = isGlobal
 end
 net.Receive("TTT_RoleVoiceState", ReceiveVoiceState)
-
----
--- Called when @{Player} stops using voice chat.
--- @param Player ply @{Player} who stopped talking
--- @hook
--- @realm client
--- @ref https://wiki.facepunch.com/gmod/GM:PlayerEndVoice
--- @local
-function GM:PlayerEndVoice(ply)
-    if not IsValid(ply) then
-        return
-    end
-
-    local plyTeam = ply:GetTeam()
-
-    if plyTeam ~= TEAM_NONE and not TEAMS[plyTeam].alone then
-        ply[plyTeam .. "_gvoice"] = false
-    end
-end
 
 --local MuteStates = {MUTE_NONE, MUTE_TERROR, MUTE_ALL, MUTE_SPEC}
 
@@ -590,8 +574,8 @@ end
 -- @realm client
 function VOICE.UpdatePlayerVoiceVolume(ply)
     local mute = VOICE.GetPreferredPlayerVoiceMuted(ply)
-    if ply.SetMute then
-        ply:SetMute(mute)
+    if ply.SetMuted then
+        ply:SetMuted(mute)
     end
 
     local vol = VOICE.GetPreferredPlayerVoiceVolume(ply)

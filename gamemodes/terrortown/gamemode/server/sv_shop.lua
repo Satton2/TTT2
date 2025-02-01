@@ -61,11 +61,11 @@ local function HandleErrorMessage(ply, equipmentName, statusCode)
     elseif statusCode == shop.statusCode.PENDINGORDER then
         LANG.Msg(ply, "buy_pending", nil, MSG_MSTACK_ROLE)
     elseif statusCode == shop.statusCode.NOTEXISTING then
-        Dev(1, ply .. " tried to buy equip that doesn't exist: " .. equipmentName)
+        Dev(1, ply:Nick() .. " tried to buy equip that doesn't exist: " .. equipmentName)
     elseif statusCode == shop.statusCode.NOTENOUGHCREDITS then
-        Dev(1, ply .. " tried to buy item/weapon, but didn't have enough credits.")
+        Dev(1, ply:Nick() .. " tried to buy item/weapon, but didn't have enough credits.")
     elseif statusCode == shop.statusCode.INVALIDID then
-        ErrorNoHaltWithStack("[TTT2][ERROR] No ID was requested by:", ply)
+        ErrorNoHaltWithStack("[TTT2][ERROR] Equipment without ID was requested by:", ply:Nick())
     elseif statusCode == shop.statusCode.NOTBUYABLE then
         LANG.Msg(ply, "This equipment cannot be bought.", nil, MSG_MSTACK_ROLE)
     elseif statusCode == shop.statusCode.NOTENOUGHPLAYERS then
@@ -160,7 +160,7 @@ local function ConCommandOrderEquipment(ply, cmd, args)
     local isSuccess, statusCode = shop.BuyEquipment(ply, args[1])
 
     if not isSuccess then
-        HandleErrorMessage(ply, statusCode)
+        HandleErrorMessage(ply, args[1], statusCode)
     end
 end
 concommand.Add("ttt_order_equipment", ConCommandOrderEquipment)
@@ -184,6 +184,16 @@ concommand.Add("ttt_cheat_credits", CheatCredits, nil, nil, FCVAR_CHEAT)
 -- @hook
 -- @realm server
 function GM:TTT2CanTransferCredits(sender, recipient, credits_per_xfer) end
+
+---
+-- Called when a player has successfully transfered a credit to another player.
+-- @param Player sender Player that has sent the credits.
+-- @param Player recipient Player that has received the credits.
+-- @param number credits Amount of credits that have been transferred.
+-- @param boolean isRecipientDead If the recipient is dead or not.
+-- @hook
+-- @realm server
+function GM:TTT2OnTransferCredits(sender, recipient, credits, isRecipientDead) end
 
 local function TransferCredits(ply, cmd, args)
     if #args ~= 2 then

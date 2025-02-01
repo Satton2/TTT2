@@ -37,7 +37,6 @@ local function UpdateTransferSubmitButton()
 
         ---
         -- @realm client
-        -- stylua: ignore
         local allow, msg = hook.Run("TTT2CanTransferCredits", client, ply, CREDITS_PER_XFER)
 
         if allow == false then
@@ -64,7 +63,7 @@ function CreateTransferMenu(parent)
     local client = LocalPlayer()
 
     dform = vgui.Create("DForm", parent)
-    dform:SetName(GetTranslation("xfer_menutitle"))
+    dform:SetLabel(GetTranslation("xfer_menutitle"))
     dform:StretchToParent(0, 0, 0, 0)
     dform:SetAutoSize(false)
 

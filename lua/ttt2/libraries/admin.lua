@@ -17,6 +17,7 @@ local ADMIN_COMMAND_RESPAWN = 5
 local ADMIN_COMMAND_CREDITS = 6
 local ADMIN_COMMAND_HEALTH = 7
 local ADMIN_COMMAND_ARMOR = 8
+local ADMIN_COMMAND_FORCE = 9
 
 admin = {}
 
@@ -191,6 +192,31 @@ function admin.PlayerSetArmor(ply, amount)
     end
 end
 
+---
+-- Sets the role of the given player.
+-- @param Player ply The player which should get another role
+-- @param number roleIndex The role index to which the player should be forced
+-- @note When called on the client the local player has to be a super admin.
+-- @realm shared
+function admin.PlayerForceRole(ply, roleIndex)
+    if CLIENT then
+        net.Start("TTT2AdminCommand")
+        net.WriteUInt(ADMIN_COMMAND_FORCE, 4)
+        net.WritePlayer(ply)
+        net.WriteUInt(roleIndex, ROLE_BITS)
+        net.SendToServer()
+    end
+
+    if SERVER then
+        if not ply:IsTerror() then
+            return
+        end
+
+        ply:SetRole(roleIndex)
+        SendFullStateUpdate()
+    end
+end
+
 -- checks if a player is in the admin user group by internally calling
 -- @{GM:TTT2AdminCheck}.
 -- @param Player ply The player to check
@@ -203,7 +229,6 @@ function admin.IsAdmin(ply)
 
     ---
     -- @realm server
-    -- stylua: ignore
     return hook.Run("TTT2AdminCheck", ply) or false
 end
 
@@ -211,7 +236,6 @@ if SERVER then
     net.Receive("TTT2AdminCommand", function(_, ply)
         ---
         -- @realm server
-        -- stylua: ignore
         if not IsValid(ply) or not hook.Run("TTT2AdminCheck", ply) then
             return
         end
@@ -234,6 +258,8 @@ if SERVER then
             admin.PlayerSetHealth(net.ReadPlayer(), net.ReadUInt(16))
         elseif command == ADMIN_COMMAND_ARMOR then
             admin.PlayerSetArmor(net.ReadPlayer(), net.ReadUInt(16))
+        elseif command == ADMIN_COMMAND_FORCE then
+            admin.PlayerForceRole(net.ReadPlayer(), net.ReadUInt(ROLE_BITS))
         end
     end)
 
@@ -244,7 +270,7 @@ if SERVER then
     -- @realm server
     function admin.ShowVersion(ply)
         local text = Format(
-            "This is [TTT2] Trouble in Terrorist Town 2 (Advanced Update) - by the TTT2 Dev Team (v%s)\n",
+            "This is [TTT2] Trouble in Terrorist Town 2 - by the TTT2 Dev Team (v%s)\n",
             GAMEMODE.Version
         )
 

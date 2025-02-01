@@ -5,12 +5,10 @@ local IsValid = IsValid
 
 ---
 -- @realm client
--- stylua: ignore
 CreateConVar("ttt_spectator_mode", "0", FCVAR_ARCHIVE)
 
 ---
 -- @realm client
--- stylua: ignore
 CreateConVar("ttt_mute_team_check", "0")
 
 local function SpectateCallback(cv, old, new)
@@ -297,8 +295,17 @@ function HELPSCRN:BuildContentArea()
 
     ---
     -- @realm client
-    -- stylua: ignore
-    if hook.Run("TTT2OnHelpSubmenuClear", parent, self.currentMenuId, self.lastMenuData, self.submenuClass) == false then return end
+    if
+        hook.Run(
+            "TTT2OnHelpSubmenuClear",
+            parent,
+            self.currentMenuId,
+            self.lastMenuData,
+            self.submenuClass
+        ) == false
+    then
+        return
+    end
 
     parent:Clear()
 
@@ -357,7 +364,7 @@ function HELPSCRN:ShowSubmenu(menuClass)
     local navArea = vgui.Create("DNavPanelTTT2", frame)
     navArea:SetWide(widthNav)
     navArea:SetPos(0, 0)
-    navArea:DockPadding(0, self.padding, 1, self.padding)
+    navArea:DockPadding(0, 0, 1, 0)
     navArea:Dock(LEFT)
 
     local contentArea = vgui.Create("DContentPanelTTT2", frame)
@@ -374,7 +381,9 @@ function HELPSCRN:ShowSubmenu(menuClass)
     submenuList:Dock(FILL)
     submenuList:SetPadding(self.padding)
     submenuList:SetBasemenuClass(menuClass, contentArea)
-    submenuList:EnableSearchBar(menuClass:HasSearchbar())
+    if menuClass.searchBarPlaceholderText then
+        submenuList:SetSearchBarPlaceholderText(menuClass.searchBarPlaceholderText)
+    end
 
     -- REFRESH SIZE OF SUBMENULIST FOR CORRECT SUBMENU DEPENDENT SIZE
     submenuList:InvalidateLayout(true)

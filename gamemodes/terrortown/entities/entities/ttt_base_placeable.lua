@@ -14,6 +14,8 @@ ENT.isDestructible = true
 
 ENT.pickupWeaponClass = nil
 
+ENT.CanUseKey = true
+
 local soundDeny = Sound("HL2Player.UseDeny")
 
 ---
@@ -67,7 +69,7 @@ if CLIENT then
         end
 
         if not self:PlayerCanPickupWeapon(client) then
-            LANG.Msg(client, "pickup_fail", nil, MSG_MSTACK_WARN)
+            LANG.Msg("pickup_fail", nil, MSG_MSTACK_WARN)
 
             self:EmitSound(soundDeny)
 

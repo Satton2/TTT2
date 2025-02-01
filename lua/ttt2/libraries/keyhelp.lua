@@ -55,31 +55,29 @@ local materialShowmore = Material("vgui/ttt/hudhelp/showmore")
 local materialPointer = Material("vgui/ttt/hudhelp/pointer")
 local materialThirdPerson = Material("vgui/ttt/hudhelp/third_person")
 local materialSave = Material("vgui/ttt/hudhelp/save")
+local materialLeaveVehicle = Material("vgui/ttt/hudhelp/leave_vehicle")
 
 ---
 -- @realm client
--- stylua: ignore
 local cvEnableCore = CreateConVar("ttt2_keyhelp_show_core", "1", FCVAR_ARCHIVE)
 
 ---
 -- @realm client
--- stylua: ignore
 local cvEnableExtra = CreateConVar("ttt2_keyhelp_show_extra", "0", FCVAR_ARCHIVE)
 
 ---
 -- @realm client
--- stylua: ignore
 local cvEnableEquipment = CreateConVar("ttt2_keyhelp_show_equipment", "1", FCVAR_ARCHIVE)
 
 ---
 -- @realm client
--- stylua: ignore
 local cvEnableBoxBlur = CreateConVar("ttt2_hud_enable_box_blur", "1", FCVAR_ARCHIVE)
 
 ---
 -- @realm client
--- stylua: ignore
 local cvEnableDescription = CreateConVar("ttt2_hud_enable_description", "1", FCVAR_ARCHIVE)
+
+local cvPropspecToggle -- Cached later in the key register function
 
 keyhelp = keyhelp or {}
 keyhelp.keyHelpers = {}
@@ -353,7 +351,13 @@ function keyhelp.InitializeBasicKeys()
         KEYHELP_CORE,
         "label_keyhelper_possess_focus_entity",
         function(client)
-            if not client:IsSpec() or IsValid(client:GetObserverTarget()) then
+            cvPropspecToggle = cvPropspecToggle or GetConVar("ttt_spec_prop_control")
+
+            if
+                not client:IsSpec()
+                or IsValid(client:GetObserverTarget())
+                or not cvPropspecToggle:GetBool()
+            then
                 return
             end
 
@@ -588,6 +592,19 @@ function keyhelp.InitializeBasicKeys()
         "label_keyhelper_free_roam",
         function(client)
             if not client:IsSpec() or not IsValid(client:GetObserverTarget()) then
+                return
+            end
+
+            return true
+        end
+    )
+    keyhelp.RegisterKeyHelper(
+        "+use",
+        materialLeaveVehicle,
+        KEYHELP_CORE,
+        "label_keyhelper_leave_vehicle",
+        function(client)
+            if client:IsSpec() or not client:InVehicle() then
                 return
             end
 

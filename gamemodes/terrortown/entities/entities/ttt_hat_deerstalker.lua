@@ -11,6 +11,8 @@ ENT.PrintName = "hat_deerstalker_name"
 ENT.Model = Model("models/ttt/deerstalker.mdl")
 ENT.CanHavePrints = false
 
+ENT.CanUseKey = true
+
 ---
 -- @realm shared
 function ENT:SetupDataTables()
@@ -42,12 +44,10 @@ end
 if SERVER then
     ---
     -- @realm server
-    -- stylua: ignore
     local ttt_hats_reclaim = CreateConVar("ttt_detective_hats_reclaim", "1")
 
     ---
     -- @realm server
-    -- stylua: ignore
     local ttt_hats_innocent = CreateConVar("ttt_detective_hats_reclaim_any", "0")
 
     ---
